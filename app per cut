@@ -1,0 +1,391 @@
+import { useState, useEffect } from "react";
+
+const DEFAULT_RECIPES = [
+  { id: "R001", name: "Pasta Carbonara", ingredients: ["pasta", "eggs", "bacon", "parmesan", "black pepper"] },
+  { id: "R002", name: "Chicken Stir Fry", ingredients: ["chicken", "soy sauce", "vegetables", "garlic", "ginger", "rice"] },
+  { id: "R003", name: "Beef Tacos", ingredients: ["beef", "tortillas", "cheese", "lettuce", "tomato", "sour cream"] },
+  { id: "R004", name: "Vegetable Soup", ingredients: ["vegetables", "broth", "onion", "garlic", "salt", "pepper"] },
+  { id: "R005", name: "Caesar Salad", ingredients: ["lettuce", "parmesan", "croutons", "eggs", "anchovy", "lemon"] },
+  { id: "R006", name: "Fried Rice", ingredients: ["rice", "eggs", "soy sauce", "vegetables", "garlic", "oil"] },
+  { id: "R007", name: "Fish Tacos", ingredients: ["fish", "tortillas", "cabbage", "lime", "cilantro", "avocado"] },
+  { id: "R008", name: "Tomato Pasta", ingredients: ["pasta", "tomato", "garlic", "olive oil", "basil", "salt"] },
+  { id: "R009", name: "Grilled Chicken Salad", ingredients: ["chicken", "lettuce", "tomato", "cucumber", "olive oil", "lemon"] },
+  { id: "R010", name: "Vegetable Curry", ingredients: ["coconut milk", "curry powder", "vegetables", "onion", "garlic", "ginger"] },
+];
+
+const TABS = ["Search", "Recipes", "Add Recipe", "History"];
+
+const TAG_COLORS = [
+  "bg-amber-100 text-amber-800",
+  "bg-green-100 text-green-800",
+  "bg-sky-100 text-sky-800",
+  "bg-rose-100 text-rose-800",
+  "bg-violet-100 text-violet-800",
+  "bg-orange-100 text-orange-800",
+];
+
+function tagColor(i) {
+  return TAG_COLORS[i % TAG_COLORS.length];
+}
+
+export default function App() {
+  const [recipes, setRecipes] = useState(() => {
+    try {
+      const saved = localStorage.getItem("meal_recipes");
+      return saved ? JSON.parse(saved) : DEFAULT_RECIPES;
+    } catch { return DEFAULT_RECIPES; }
+  });
+  const [history, setHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem("meal_history");
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+
+  const [tab, setTab] = useState("Search");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTags, setSearchTags] = useState([]);
+  const [searchResults, setSearchResults] = useState(null);
+  const [detailRecipe, setDetailRecipe] = useState(null);
+
+  // Add recipe form
+  const [form, setForm] = useState({ id: "", name: "", ingredients: "" });
+  const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
+
+  // Edit recipe
+  const [editId, setEditId] = useState(null);
+  const [editIngredients, setEditIngredients] = useState("");
+  const [editError, setEditError] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem("meal_recipes", JSON.stringify(recipes));
+  }, [recipes]);
+  useEffect(() => {
+    localStorage.setItem("meal_history", JSON.stringify(history));
+  }, [history]);
+
+  // Search tag input
+  function handleSearchKeyDown(e) {
+    if ((e.key === "Enter" || e.key === ",") && searchInput.trim()) {
+      e.preventDefault();
+      const val = searchInput.trim().toLowerCase().replace(/,/g, "");
+      if (val && !searchTags.includes(val)) {
+        setSearchTags([...searchTags, val]);
+      }
+      setSearchInput("");
+    }
+    if (e.key === "Backspace" && !searchInput && searchTags.length) {
+      setSearchTags(searchTags.slice(0, -1));
+    }
+  }
+
+  function removeTag(tag) {
+    setSearchTags(searchTags.filter(t => t !== tag));
+    setSearchResults(null);
+  }
+
+  function runSearch() {
+    if (searchTags.length < 4) return;
+    const matched = [];
+    for (const recipe of recipes) {
+      const matches = searchTags.filter(userIng =>
+        recipe.ingredients.some(ri => userIng.includes(ri) || ri.includes(userIng))
+      ).length;
+      if (matches >= 2) {
+        matched.push({
+          recipe,
+          matches,
+          pct: Math.round((matches / searchTags.length) * 100),
+        });
+      }
+    }
+    matched.sort((a, b) => b.matches - a.matches);
+    setSearchResults(matched);
+    if (matched.length > 0) {
+      const entry = {
+        date: new Date().toLocaleString(),
+        ingredients: [...searchTags],
+        topMatch: matched[0].recipe.name,
+        count: matched.length,
+      };
+      setHistory(h => [entry, ...h]);
+    }
+  }
+
+  function deleteRecipe(id) {
+    setRecipes(r => r.filter(x => x.id !== id));
+    if (detailRecipe?.id === id) setDetailRecipe(null);
+  }
+
+  function saveEdit(id) {
+    const ings = editIngredients.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (ings.length < 2) { setEditError("At least 2 ingredients required."); return; }
+    setRecipes(r => r.map(x => x.id === id ? { ...x, ingredients: ings } : x));
+    setEditId(null);
+    setEditError("");
+    if (detailRecipe?.id === id) setDetailRecipe(prev => ({ ...prev, ingredients: ings }));
+  }
+
+  function handleAddRecipe() {
+    setFormError(""); setFormSuccess("");
+    const id = form.id.trim().toUpperCase();
+    const name = form.name.trim();
+    const ings = form.ingredients.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (!id) { setFormError("Recipe ID is required."); return; }
+    if (!name) { setFormError("Recipe name is required."); return; }
+    if (recipes.some(r => r.id.toUpperCase() === id)) { setFormError("Recipe ID already exists."); return; }
+    if (ings.length < 2) { setFormError("Enter at least 2 ingredients."); return; }
+    setRecipes(r => [...r, { id, name, ingredients: ings, createdAt: new Date().toLocaleString() }]);
+    setForm({ id: "", name: "", ingredients: "" });
+    setFormSuccess(`"${name}" added successfully!`);
+  }
+
+  return (
+    <div style={{ fontFamily: "'Georgia', serif", minHeight: "100vh", background: "#faf7f2" }}>
+      {/* Header */}
+      <div style={{
+        background: "#1a1208",
+        padding: "28px 32px 0",
+        position: "sticky", top: 0, zIndex: 10,
+        boxShadow: "0 2px 16px #0003"
+      }}>
+        <div style={{ maxWidth: 780, margin: "0 auto" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 20 }}>
+            <span style={{ fontSize: 26, color: "#f5c842", letterSpacing: 1 }}>🥘</span>
+            <h1 style={{ margin: 0, fontSize: 22, color: "#fdf6e3", fontWeight: 700, letterSpacing: 0.5 }}>
+              Meal Planner
+            </h1>
+            <span style={{ fontSize: 13, color: "#a89060", marginLeft: 4 }}>Recipe Suggester</span>
+          </div>
+          <div style={{ display: "flex", gap: 0 }}>
+            {TABS.map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{
+                background: tab === t ? "#faf7f2" : "transparent",
+                border: "none",
+                borderTop: tab === t ? "2px solid #f5c842" : "2px solid transparent",
+                color: tab === t ? "#1a1208" : "#c8aa70",
+                padding: "10px 20px",
+                fontSize: 14,
+                fontFamily: "inherit",
+                cursor: "pointer",
+                fontWeight: tab === t ? 700 : 400,
+                borderRadius: "6px 6px 0 0",
+                transition: "all 0.15s",
+              }}>{t}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ maxWidth: 780, margin: "0 auto", padding: "32px 20px" }}>
+
+        {/* SEARCH TAB */}
+        {tab === "Search" && (
+          <div>
+            <h2 style={{ fontSize: 20, color: "#1a1208", marginTop: 0 }}>What's in your kitchen?</h2>
+            <p style={{ color: "#7a6040", fontSize: 14, marginTop: -8 }}>
+              Type an ingredient and press <kbd style={{ background: "#e8e0d0", borderRadius: 3, padding: "1px 5px", fontSize: 12 }}>Enter</kbd> to add it. Add at least 4 to search.
+            </p>
+
+            {/* Tag input */}
+            <div style={{
+              display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center",
+              background: "#fff", border: "1.5px solid #d4c9b0", borderRadius: 10,
+              padding: "10px 14px", minHeight: 52
+            }}>
+              {searchTags.map((tag, i) => (
+                <span key={tag} style={{
+                  display: "inline-flex", alignItems: "center", gap: 5,
+                  background: "#f5c842", color: "#1a1208",
+                  borderRadius: 20, padding: "3px 10px 3px 12px",
+                  fontSize: 13, fontWeight: 600
+                }}>
+                  {tag}
+                  <button onClick={() => removeTag(tag)} style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    color: "#7a5a00", fontSize: 15, lineHeight: 1, padding: 0
+                  }}>×</button>
+                </span>
+              ))}
+              <input
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder={searchTags.length === 0 ? "e.g. garlic, eggs, pasta..." : "Add more..."}
+                style={{
+                  border: "none", outline: "none", fontSize: 14,
+                  background: "transparent", minWidth: 140, flex: 1,
+                  fontFamily: "inherit", color: "#1a1208"
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 14, alignItems: "center" }}>
+              <button onClick={runSearch} disabled={searchTags.length < 4} style={{
+                background: searchTags.length >= 4 ? "#1a1208" : "#d4c9b0",
+                color: searchTags.length >= 4 ? "#f5c842" : "#a89060",
+                border: "none", borderRadius: 8, padding: "10px 24px",
+                fontSize: 14, fontWeight: 700, cursor: searchTags.length >= 4 ? "pointer" : "not-allowed",
+                fontFamily: "inherit", letterSpacing: 0.5,
+                transition: "all 0.2s"
+              }}>
+                Find Recipes →
+              </button>
+              {searchTags.length > 0 && searchTags.length < 4 && (
+                <span style={{ color: "#b08050", fontSize: 13 }}>
+                  {4 - searchTags.length} more ingredient{4 - searchTags.length !== 1 ? "s" : ""} needed
+                </span>
+              )}
+              {searchTags.length > 0 && (
+                <button onClick={() => { setSearchTags([]); setSearchResults(null); }} style={{
+                  background: "none", border: "1px solid #d4c9b0", borderRadius: 8,
+                  padding: "9px 16px", fontSize: 13, cursor: "pointer",
+                  color: "#7a6040", fontFamily: "inherit"
+                }}>Clear</button>
+              )}
+            </div>
+
+            {/* Results */}
+            {searchResults !== null && (
+              <div style={{ marginTop: 28 }}>
+                <h3 style={{ fontSize: 16, color: "#1a1208", marginBottom: 16 }}>
+                  {searchResults.length > 0
+                    ? `${searchResults.length} recipe${searchResults.length !== 1 ? "s" : ""} found`
+                    : "No matching recipes"}
+                </h3>
+                {searchResults.length === 0 && (
+                  <p style={{ color: "#9a8060", fontSize: 14 }}>Try adding different or more ingredients.</p>
+                )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {searchResults.map(({ recipe, matches, pct }, idx) => (
+                    <div key={recipe.id} style={{
+                      background: "#fff", borderRadius: 12,
+                      border: idx === 0 ? "2px solid #f5c842" : "1.5px solid #e8e0d0",
+                      padding: "16px 20px",
+                      boxShadow: idx === 0 ? "0 2px 12px #f5c84222" : "none"
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div>
+                          {idx === 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#b08000", textTransform: "uppercase", letterSpacing: 1 }}>Best Match</span>}
+                          <div style={{ fontSize: 17, fontWeight: 700, color: "#1a1208", marginTop: idx === 0 ? 2 : 0 }}>{recipe.name}</div>
+                          <div style={{ fontSize: 12, color: "#9a8060", marginTop: 2 }}>{recipe.id}</div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 22, fontWeight: 800, color: pct >= 50 ? "#2d7a3a" : "#b06020" }}>{pct}%</div>
+                          <div style={{ fontSize: 11, color: "#9a8060" }}>{matches} matched</div>
+                        </div>
+                      </div>
+                      {/* Match bar */}
+                      <div style={{ background: "#f0ead8", borderRadius: 4, height: 5, marginTop: 12, overflow: "hidden" }}>
+                        <div style={{ width: `${pct}%`, height: "100%", background: pct >= 50 ? "#4caf65" : "#e8a040", borderRadius: 4, transition: "width 0.4s" }} />
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                        {recipe.ingredients.map((ing, i) => (
+                          <span key={ing} style={{
+                            fontSize: 12, padding: "2px 10px", borderRadius: 20,
+                            background: searchTags.includes(ing) ? "#fef3b0" : "#f0ead8",
+                            color: searchTags.includes(ing) ? "#7a5a00" : "#6a5030",
+                            fontWeight: searchTags.includes(ing) ? 700 : 400,
+                          }}>{ing}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* RECIPES TAB */}
+        {tab === "Recipes" && !detailRecipe && (
+          <div>
+            <h2 style={{ fontSize: 20, color: "#1a1208", marginTop: 0 }}>All Recipes <span style={{ fontSize: 14, color: "#9a8060", fontWeight: 400 }}>({recipes.length})</span></h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+              {recipes.map((r, i) => (
+                <div key={r.id} onClick={() => setDetailRecipe(r)} style={{
+                  background: "#fff", borderRadius: 12, border: "1.5px solid #e8e0d0",
+                  padding: "16px", cursor: "pointer",
+                  transition: "box-shadow 0.15s, border-color 0.15s",
+                  boxShadow: "0 1px 4px #0001"
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 16px #0002"; e.currentTarget.style.borderColor = "#f5c842"; }}
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 1px 4px #0001"; e.currentTarget.style.borderColor = "#e8e0d0"; }}
+                >
+                  <div style={{ fontSize: 11, color: "#a89060", letterSpacing: 1, textTransform: "uppercase" }}>{r.id}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1208", marginTop: 4 }}>{r.name}</div>
+                  <div style={{ fontSize: 12, color: "#9a8060", marginTop: 6 }}>{r.ingredients.length} ingredients</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
+                    {r.ingredients.slice(0, 3).map((ing, j) => (
+                      <span key={ing} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: "#f0ead8", color: "#6a5030" }}>{ing}</span>
+                    ))}
+                    {r.ingredients.length > 3 && <span style={{ fontSize: 11, color: "#a89060" }}>+{r.ingredients.length - 3}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* RECIPE DETAIL */}
+        {tab === "Recipes" && detailRecipe && (() => {
+          const r = recipes.find(x => x.id === detailRecipe.id) || detailRecipe;
+          return (
+            <div>
+              <button onClick={() => { setDetailRecipe(null); setEditId(null); setEditError(""); }} style={{
+                background: "none", border: "none", color: "#b08050", cursor: "pointer",
+                fontSize: 14, padding: 0, marginBottom: 20, fontFamily: "inherit"
+              }}>← Back to Recipes</button>
+              <div style={{ background: "#fff", borderRadius: 14, border: "1.5px solid #e8e0d0", padding: "24px 28px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: "#a89060", letterSpacing: 1, textTransform: "uppercase" }}>{r.id}</div>
+                    <h2 style={{ margin: "4px 0 0", fontSize: 24, color: "#1a1208" }}>{r.name}</h2>
+                  </div>
+                  <button onClick={() => { if (window.confirm(`Delete "${r.name}"?`)) { deleteRecipe(r.id); setDetailRecipe(null); } }} style={{
+                    background: "#fff0f0", border: "1px solid #f5c0c0", color: "#c04040",
+                    borderRadius: 7, padding: "6px 14px", fontSize: 13, cursor: "pointer", fontFamily: "inherit"
+                  }}>Delete</button>
+                </div>
+
+                <div style={{ marginTop: 20 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#7a6040", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+                    Ingredients ({r.ingredients.length})
+                  </div>
+                  {editId === r.id ? (
+                    <div>
+                      <textarea
+                        value={editIngredients}
+                        onChange={e => setEditIngredients(e.target.value)}
+                        rows={3}
+                        style={{ width: "100%", borderRadius: 8, border: "1.5px solid #d4c9b0", padding: "10px 12px", fontSize: 14, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }}
+                        placeholder="comma-separated ingredients"
+                      />
+                      {editError && <div style={{ color: "#c04040", fontSize: 13, marginTop: 4 }}>{editError}</div>}
+                      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                        <button onClick={() => saveEdit(r.id)} style={{ background: "#1a1208", color: "#f5c842", border: "none", borderRadius: 7, padding: "8px 18px", fontSize: 13, cursor: "pointer", fontFamily: "inherit", fontWeight: 700 }}>Save</button>
+                        <button onClick={() => { setEditId(null); setEditError(""); }} style={{ background: "#f0ead8", border: "none", borderRadius: 7, padding: "8px 18px", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                        {r.ingredients.map((ing, i) => (
+                          <span key={ing} style={{ fontSize: 13, padding: "4px 14px", borderRadius: 20, background: "#f5f0e4", color: "#3a2a10", border: "1px solid #e0d4b0" }}>{ing}</span>
+                        ))}
+                      </div>
+                      <button onClick={() => { setEditId(r.id); setEditIngredients(r.ingredients.join(", ")); }} style={{
+                        marginTop: 14, background: "none", border: "1px solid #d4c9b0",
+                        borderRadius: 7, padding: "7px 16px", fontSize: 13, cursor: "pointer",
+                        color: "#7a6040", fontFamily: "inherit"
+                      }}>✏️ Edit Ingredients</button>
+                    </div>
+                  )}
+                </div>
+                {r.createdAt && <div style={{ marginTop: 20, fontSize: 12, color: "#b0a080" }}>Added: {r.createdAt}</div>}
+              </div>
+            </div>
+          );
+   

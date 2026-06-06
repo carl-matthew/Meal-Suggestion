@@ -1,0 +1,303 @@
+from datetime import datetime
+import csv
+import os
+
+recipes = []
+ingredients_log = []
+
+class Recipe:
+    def __init__(self, recipe_id: str, name: str, ingredients: list):
+        self.recipe_id: str = recipe_id
+        self.name: str = name
+        self.ingredients: list = ingredients
+        self.created_date = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+
+class IngredientsLog:
+    def __init__(self, recipe: Recipe, user_ingredients: list):
+        self.recipe: Recipe = recipe
+        self.user_ingredients: list = user_ingredients
+        self.matched_count: int = 0
+        self.match_percentage: float = 0.0
+        self.search_date = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+
+# CSV Functions
+def load_recipes_from_csv(csv_file="recipes.csv"):
+    """Load recipes from CSV file"""
+    global recipes
+    
+    if not os.path.exists(csv_file):
+        print("CSV file not found. Creating new one with default recipes...")
+        return False
+    
+    try:
+        with open(csv_file, 'r', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                recipe_id = row['recipe_id']
+                name = row['recipe_name']
+                ingredients = [ing.strip() for ing in row['ingredients'].split(';')]
+                
+                recipe = Recipe(recipe_id, name, ingredients)
+                recipes.append(recipe)
+        
+        print(f"✓ Loaded {len(recipes)} recipes from {csv_file}")
+        return True
+    except Exception as e:
+        print(f"Error loading CSV: {e}")
+        return False
+
+def save_recipes_to_csv(csv_file="recipes.csv"):
+    """Save recipes to CSV file"""
+    try:
+        with open(csv_file, 'w', newline='', encoding='utf-8') as file:
+            writer = csv.DictWriter(file, fieldnames=['recipe_id', 'recipe_name', 'ingredients'])
+            writer.writeheader()
+            
+            for recipe in recipes:
+                writer.writerow({
+                    'recipe_id': recipe.recipe_id,
+                    'recipe_name': recipe.name,
+                    'ingredients': '; '.join(recipe.ingredients)
+                })
+        
+        print(f"✓ Saved {len(recipes)} recipes to {csv_file}")
+        return True
+    except Exception as e:
+        print(f"Error saving CSV: {e}")
+        return False
+
+def initialize_default_recipes():
+    """Initialize with default recipes if CSV doesn't exist"""
+    global recipes
+    
+    default_recipes = [
+        ("R001", "Pasta Carbonara", ["pasta", "eggs", "bacon", "parmesan", "black pepper"]),
+        ("R002", "Chicken Stir Fry", ["chicken", "soy sauce", "vegetables", "garlic", "ginger", "rice"]),
+        ("R003", "Beef Tacos", ["beef", "tortillas", "cheese", "lettuce", "tomato", "sour cream"]),
+        ("R004", "Vegetable Soup", ["vegetables", "broth", "onion", "garlic", "salt", "pepper"]),
+        ("R005", "Caesar Salad", ["lettuce", "parmesan", "croutons", "eggs", "anchovy", "lemon"]),
+        ("R006", "Fried Rice", ["rice", "eggs", "soy sauce", "vegetables", "garlic", "oil"]),
+        ("R007", "Fish Tacos", ["fish", "tortillas", "cabbage", "lime", "cilantro", "avocado"]),
+        ("R008", "Tomato Pasta", ["pasta", "tomato", "garlic", "olive oil", "basil", "salt"]),
+        ("R009", "Grilled Chicken Salad", ["chicken", "lettuce", "tomato", "cucumber", "olive oil", "lemon"]),
+        ("R010", "Vegetable Curry", ["coconut milk", "curry powder", "vegetables", "onion", "garlic", "ginger"]),
+    ]
+    
+    for recipe_id, name, ingredients in default_recipes:
+        recipe = Recipe(recipe_id, name, ingredients)
+        recipes.append(recipe)
+    
+    print(f"✓ Initialized {len(recipes)} default recipes")
+    save_recipes_to_csv()
+
+def add_recipe():
+    """Add a new recipe"""
+    recipe_id = input("Enter Recipe ID (e.g., R011): ")
+    name = input("Enter Recipe Name: ")
+    
+    # Check if recipe already exists
+    if any(r.recipe_id == recipe_id for r in recipes):
+        print("✗ Recipe ID already exists.")
+        return
+    
+    ingredients_str = input("Enter ingredients (comma-separated): ")
+    ingredients = [ing.strip().lower() for ing in ingredients_str.split(",")]
+    
+    if len(ingredients) < 2:
+        print("✗ Recipe must have at least 2 ingredients.")
+        return
+    
+    new_recipe = Recipe(recipe_id, name, ingredients)
+    recipes.append(new_recipe)
+    print(f"✓ Recipe Added: {name}")
+    save_recipes_to_csv()
+
+def delete_recipe():
+    """Delete a recipe"""
+    recipe_id = input("Enter Recipe ID to delete: ")
+    
+    for recipe in recipes:
+        if recipe.recipe_id == recipe_id:
+            recipes.remove(recipe)
+            print(f"✓ Recipe deleted: {recipe.name}")
+            save_recipes_to_csv()
+            return
+    
+    print("✗ Recipe not found.")
+
+def update_recipe():
+    """Update a recipe's ingredients"""
+    recipe_id = input("Enter Recipe ID to update: ")
+    
+    for recipe in recipes:
+        if recipe.recipe_id == recipe_id:
+            new_ingredients_str = input("Enter new ingredients (comma-separated): ")
+            new_ingredients = [ing.strip().lower() for ing in new_ingredients_str.split(",")]
+            
+            if len(new_ingredients) < 2:
+                print("✗ Recipe must have at least 2 ingredients.")
+                return
+            
+            recipe.ingredients = new_ingredients
+            print(f"✓ Recipe updated: {recipe.name}")
+            save_recipes_to_csv()
+            return
+    
+    print("✗ Recipe not found.")
+
+def view_all_recipes():
+    """View all recipes"""
+    if not recipes:
+        print("✗ No recipes available.")
+        return
+    
+    print("\n" + "="*70)
+    print("RECIPE LIST")
+    print("="*70)
+    for recipe in recipes:
+        print(f"Recipe ID  : {recipe.recipe_id}")
+        print(f"Name       : {recipe.name}")
+        print(f"Ingredients: {', '.join(recipe.ingredients)}")
+        print(f"Added Date : {recipe.created_date}\n")
+    print("="*70 + "\n")
+
+def view_recipe_details():
+    """View details of a specific recipe"""
+    recipe_id = input("Enter Recipe ID: ")
+    
+    for recipe in recipes:
+        if recipe.recipe_id == recipe_id:
+            print("\n" + "="*70)
+            print(f"RECIPE DETAILS - {recipe.name}")
+            print("="*70)
+            print(f"Recipe ID      : {recipe.recipe_id}")
+            print(f"Name           : {recipe.name}")
+            print(f"Total Ingredients: {len(recipe.ingredients)}")
+            print(f"Ingredients    : {', '.join(recipe.ingredients)}")
+            print(f"Created Date   : {recipe.created_date}")
+            print("="*70 + "\n")
+            return
+    
+    print("✗ Recipe not found.")
+
+def search_recipes_by_ingredients():
+    """Search recipes by user ingredients (requires at least 4 ingredients)"""
+    user_input = input("Enter at least 4 ingredients (comma-separated): ")
+    user_ingredients = [ing.strip().lower() for ing in user_input.split(",")]
+    
+    if len(user_ingredients) < 4:
+        print(f"✗ Please provide at least 4 ingredients. You provided {len(user_ingredients)}.")
+        return
+    
+    if not recipes:
+        print("✗ No recipes available.")
+        return
+    
+    # Find matching recipes
+    matched_recipes = []
+    
+    for recipe in recipes:
+        matches = sum(
+            1 for user_ing in user_ingredients
+            if any(user_ing in recipe_ing or recipe_ing in user_ing
+                   for recipe_ing in recipe.ingredients)
+        )
+        
+        if matches >= 2:
+            match_percentage = round((matches / len(user_ingredients)) * 100, 1)
+            matched_recipes.append({
+                'recipe': recipe,
+                'matches': matches,
+                'match_percentage': match_percentage
+            })
+    
+    # Sort by matches
+    matched_recipes.sort(key=lambda x: x['matches'], reverse=True)
+    
+    # Display results
+    print("\n" + "="*70)
+    print(f"RECIPE SUGGESTIONS FOR YOUR INGREDIENTS")
+    print("="*70)
+    print(f"Your ingredients ({len(user_ingredients)}): {', '.join(user_ingredients)}\n")
+    
+    if matched_recipes:
+        print(f"Found {len(matched_recipes)} matching recipe(s):\n")
+        for i, match in enumerate(matched_recipes, 1):
+            recipe = match['recipe']
+            print(f"{i}. {recipe.name}")
+            print(f"   Recipe ID       : {recipe.recipe_id}")
+            print(f"   Matched Count   : {match['matches']}")
+            print(f"   Match Percentage: {match['match_percentage']}%")
+            print(f"   Required        : {', '.join(recipe.ingredients)}\n")
+    else:
+        print("✗ No recipes found matching your ingredients.")
+    
+    print("="*70 + "\n")
+    
+    # Log the search
+    if matched_recipes:
+        log_entry = IngredientsLog(matched_recipes[0]['recipe'], user_ingredients)
+        log_entry.matched_count = matched_recipes[0]['matches']
+        log_entry.match_percentage = matched_recipes[0]['match_percentage']
+        ingredients_log.append(log_entry)
+
+def view_search_logs():
+    """View search history"""
+    if not ingredients_log:
+        print("✗ No search history available.")
+        return
+    
+    print("\n" + "="*70)
+    print("SEARCH HISTORY")
+    print("="*70)
+    for i, log in enumerate(ingredients_log, 1):
+        print(f"{i}. Recipe: {log.recipe.name}")
+        print(f"   Your Ingredients: {', '.join(log.user_ingredients)}")
+        print(f"   Matched Count   : {log.matched_count}")
+        print(f"   Match %         : {log.match_percentage}%")
+        print(f"   Search Date     : {log.search_date}\n")
+    print("="*70 + "\n")
+
+# Main Program
+if __name__ == "__main__":
+    # Load or initialize recipes
+    if not load_recipes_from_csv("recipes.csv"):
+        initialize_default_recipes()
+    
+    while True:
+        print("≈"*60)
+        print("\n≈≈≈≈≈≈* Recipe Suggester System *≈≈≈≈≈≈")
+        print("≈"*60)
+        print("1.  Add Recipe")
+        print("2.  Delete Recipe")
+        print("3.  Update Recipe")
+        print("4.  View All Recipes")
+        print("5.  View Recipe Details")
+        print("6.  Search Recipes by Ingredients (4+ required)")
+        print("7.  View Search History")
+        print("8.  Exit")
+        print()
+        print("≈"*60)
+        choice = input("Choose an option: ")
+        
+        if choice == "1":
+            add_recipe()
+        elif choice == "2":
+            delete_recipe()
+        elif choice == "3":
+            update_recipe()
+        elif choice == "4":
+            view_all_recipes()
+        elif choice == "5":
+            view_recipe_details()
+        elif choice == "6":
+            search_recipes_by_ingredients()
+        elif choice == "7":
+            view_search_logs()
+        elif choice == "8":
+            print("Exiting Recipe Suggester program...")
+            break
+        else:
+            print("✗ Invalid option. Please try again.")
+        
+        input("\nPress Enter to continue...")
